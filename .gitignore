@@ -1,0 +1,33 @@
+# Binaries
+pmbuddy*
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build output
+dist/
+build/
+
+# Dependencies
+go.sum
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Storage
+~/.pmbuddy/
+.pmbuddy/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+tmp/
