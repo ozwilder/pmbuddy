@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -181,20 +182,17 @@ func fileExists(filename string) bool {
 
 // TranscribeAudio converts recorded audio to text using Python speech recognition
 func (vc *VoiceCapture) TranscribeAudio(audioFile string) (string, error) {
-	fmt.Println("\n⏳ Transcribing audio...")
-	
 	// Find transcribe.py script
 	scriptPath := findTranscribeScript()
 	if scriptPath == "" {
 		return "", fmt.Errorf("transcribe.py script not found")
 	}
 
-	// Run Python transcriber
+	// Run Python transcriber (suppress stderr to avoid debug clutter)
 	cmd := exec.Command("python3", scriptPath, audioFile)
 	output, err := cmd.Output()
 	
 	if err != nil {
-		// Check stderr for more details
 		return "", fmt.Errorf("transcription failed: %v", err)
 	}
 
@@ -229,16 +227,28 @@ func findTranscribeScript() string {
 // extractTextFromOutput extracts transcribed text from Python script output
 func extractTextFromOutput(output string) string {
 	// If output is JSON (from transcriber), parse it
-	if strings.HasPrefix(output, "{") {
-		// Try to extract "text" field
+	if strings.HasPrefix(strings.TrimSpace(output), "{") {
+		// Try to parse as JSON properly
+		var result map[string]interface{}
+		if err := json.Unmarshal([]byte(output), &result); err == nil {
+			// Successfully parsed JSON
+			if text, ok := result["text"].(string); ok && text != "" {
+				return text
+			}
+		}
+		
+		// Fallback to manual parsing if JSON unmarshaling fails
+		// This handles edge cases with unusual JSON formatting
 		parts := strings.Split(output, "\"text\":\"")
 		if len(parts) > 1 {
 			textPart := strings.Split(parts[1], "\"")[0]
-			return textPart
+			if textPart != "" {
+				return textPart
+			}
 		}
 	}
 
-	// Otherwise return as-is
+	// Otherwise return as-is (for non-JSON output)
 	return output
 }
 
