@@ -2,6 +2,7 @@ package audio
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,13 +64,17 @@ func (vc *VoiceCapture) CaptureAudio() (string, error) {
 	SimpleListeningIndicator() // Show animation while recording
 
 	var cmd *exec.Cmd
+	
+	// Auto-detect the best microphone device
+	// On macOS, device :3 is often the microphone, but we check :0-:3
+	micDevice := findBestMicrophoneDevice()
 
 	switch vc.RecordBinary {
 	case "ffmpeg":
 		// ffmpeg command to capture microphone on macOS with VOLUME BOOST
 		cmd = exec.Command("ffmpeg",
 			"-f", "avfoundation",           // macOS audio framework
-			"-i", ":0",                     // Default microphone (input device 0)
+			"-i", micDevice,                // Microphone device (auto-detected)
 			"-t", fmt.Sprintf("%d", vc.Timeout),
 			"-af", "loudnorm=I=-20:TP=-1.5:LRA=11", // Audio normalization/volume boost
 			"-q:a", "9",                    // Quality setting
@@ -103,6 +108,75 @@ func (vc *VoiceCapture) CaptureAudio() (string, error) {
 
 	fmt.Println("✅ Audio captured successfully")
 	return audioFile, nil
+}
+
+// findBestMicrophoneDevice auto-detects the best microphone device
+// Tries devices :0-:3 and returns the one with the most audio energy
+func findBestMicrophoneDevice() string {
+	bestDevice := ":0" // Default fallback
+	bestRMS := 0.0
+	
+	// Try each device briefly to find the loudest one (likely the microphone)
+	for i := 0; i <= 3; i++ {
+		device := fmt.Sprintf(":%d", i)
+		testFile := fmt.Sprintf("/tmp/pmbuddy_device_test_%d.wav", i)
+		
+		// Try to record 0.5 seconds
+		cmd := exec.Command("ffmpeg",
+			"-f", "avfoundation",
+			"-i", device,
+			"-t", "0.5",
+			"-q:a", "9", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
+			"-y", testFile,
+		)
+		
+		if err := cmd.Run(); err == nil && fileExists(testFile) {
+			// Check audio energy
+			rms := getAudioEnergy(testFile)
+			if rms > bestRMS {
+				bestRMS = rms
+				bestDevice = device
+			}
+			// Cleanup
+			os.Remove(testFile)
+		}
+	}
+	
+	return bestDevice
+}
+
+// getAudioEnergy calculates the RMS energy of audio in a WAV file
+func getAudioEnergy(filename string) float64 {
+	data, err := os.ReadFile(filename)
+	if err != nil || len(data) < 44 {
+		return 0
+	}
+	
+	// Skip WAV header (44 bytes) and read audio frames
+	audioData := data[44:]
+	if len(audioData) < 2 {
+		return 0
+	}
+	
+	// Convert bytes to int16 samples (simple, assuming little-endian)
+	var sum float64
+	for i := 0; i < len(audioData)-1; i += 2 {
+		sample := int16(audioData[i]) | (int16(audioData[i+1]) << 8)
+		sum += float64(sample*sample)
+	}
+	
+	samples := len(audioData) / 2
+	if samples == 0 {
+		return 0
+	}
+	
+	return math.Sqrt(sum / float64(samples))
+}
+
+// fileExists checks if a file exists
+func fileExists(filename string) bool {
+	_, err := os.Stat(filename)
+	return err == nil
 }
 
 // TranscribeAudio converts recorded audio to text using Python speech recognition
