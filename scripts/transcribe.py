@@ -27,7 +27,7 @@ def transcribe_with_recognizer(audio_file):
         return None
 
     recognizer = sr.Recognizer()
-    recognizer.energy_threshold = 4000  # Adjust for noise sensitivity
+    recognizer.energy_threshold = 3000  # Lower threshold for quiet audio
     recognizer.dynamic_energy_threshold = True
 
     try:
@@ -35,10 +35,21 @@ def transcribe_with_recognizer(audio_file):
             print(f"Loading audio from {audio_file}...", file=sys.stderr)
             audio = recognizer.record(source)
 
+        # Check if audio is too quiet
+        raw_data = audio.get_raw_data()
+        if len(raw_data) < 1000:
+            print(json.dumps({
+                "success": False,
+                "error": "Audio too short or empty (microphone not working?)",
+                "text": ""
+            }), file=sys.stderr)
+            return None
+
         print("Recognizing speech...", file=sys.stderr)
         
         # Try Google Speech Recognition (no key needed, uses free API)
         try:
+            print("  Trying Google Speech API...", file=sys.stderr)
             text = recognizer.recognize_google(audio)
             print(json.dumps({
                 "success": True,
@@ -47,12 +58,15 @@ def transcribe_with_recognizer(audio_file):
             }))
             return text
         except sr.UnknownValueError:
-            print("Google: Could not understand audio", file=sys.stderr)
+            print("  Google: Could not understand audio (too quiet?)", file=sys.stderr)
         except sr.RequestError as e:
-            print(f"Google API error: {e}", file=sys.stderr)
+            print(f"  Google API error: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"  Google error: {e}", file=sys.stderr)
 
         # Try Sphinx (offline, no internet required)
         try:
+            print("  Trying Sphinx (offline)...", file=sys.stderr)
             text = recognizer.recognize_sphinx(audio)
             if text and len(text) > 2:  # Sphinx sometimes returns garbage
                 print(json.dumps({
@@ -62,14 +76,33 @@ def transcribe_with_recognizer(audio_file):
                 }))
                 return text
         except sr.RequestError as e:
-            print(f"Sphinx error: {e}", file=sys.stderr)
+            print(f"  Sphinx error (may not be installed): {e}", file=sys.stderr)
         except Exception as e:
-            print(f"Sphinx failed: {e}", file=sys.stderr)
+            print(f"  Sphinx error: {e}", file=sys.stderr)
+
+        # Try Whisper (if installed)
+        try:
+            print("  Trying Whisper (if installed)...", file=sys.stderr)
+            import whisper
+            model = whisper.load_model("base")
+            result = model.transcribe(audio_file, language="en")
+            text = result["text"].strip()
+            if text:
+                print(json.dumps({
+                    "success": True,
+                    "text": text,
+                    "engine": "whisper"
+                }))
+                return text
+        except ImportError:
+            print("  Whisper: not installed (optional)", file=sys.stderr)
+        except Exception as e:
+            print(f"  Whisper error: {e}", file=sys.stderr)
 
         # If all else fails
         print(json.dumps({
             "success": False,
-            "error": "Could not recognize speech with any available engine",
+            "error": "Could not recognize speech with any available engine. Try speaking louder or closer to the microphone.",
             "text": ""
         }), file=sys.stderr)
         return None
@@ -77,7 +110,7 @@ def transcribe_with_recognizer(audio_file):
     except Exception as e:
         print(json.dumps({
             "success": False,
-            "error": str(e),
+            "error": f"Audio processing error: {str(e)}",
             "text": ""
         }), file=sys.stderr)
         return None

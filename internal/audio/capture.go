@@ -173,9 +173,20 @@ func (vc *VoiceCapture) CaptureVoiceWithFallback() (string, error) {
 	audioFile, err := vc.CaptureAudio()
 	if err != nil {
 		fmt.Printf("⚠️  Microphone capture failed: %v\n", err)
-		fmt.Println("Falling back to text input dialog...\n")
+		fmt.Printf("    Issue: %v\n", err)
+		fmt.Println("\n💡 Your microphone may not be accessible to ffmpeg.")
+		fmt.Println("   Using text input instead (just type your question).\n")
 		
 		// Fallback to AppleScript dialog (manual typing)
+		return vc.TextInputDialog()
+	}
+
+	// Check if audio file has real content
+	fileInfo, err := os.Stat(audioFile)
+	if err != nil || fileInfo.Size() < 1000 {
+		fmt.Printf("⚠️  Audio file seems empty or too small\n")
+		fmt.Println("    Using text input instead.\n")
+		os.Remove(audioFile)
 		return vc.TextInputDialog()
 	}
 
@@ -185,9 +196,16 @@ func (vc *VoiceCapture) CaptureVoiceWithFallback() (string, error) {
 
 	if err != nil {
 		fmt.Printf("⚠️  Transcription failed: %v\n", err)
-		fmt.Println("Falling back to text input dialog...\n")
+		fmt.Println("\n💡 Speech recognition needs clearer audio.")
+		fmt.Println("   Using text input instead (just type your question).\n")
 		
 		// Fallback to text input
+		return vc.TextInputDialog()
+	}
+
+	if text == "" {
+		fmt.Println("⚠️  No speech was recognized (empty audio?)")
+		fmt.Println("   Using text input instead.\n")
 		return vc.TextInputDialog()
 	}
 
