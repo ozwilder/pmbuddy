@@ -147,24 +147,33 @@ return response, nil
 
 // buildContextDirective creates a system prompt based on preferences
 func (pm *PMAdvisor) buildContextDirective(profile knowledge.PreferenceProfile) string {
-directive := "You are PMBuddy, an expert PM advisor."
+	directive := `You are PMBuddy, an expert PM advisor helping with product tasks and thinking.
 
-// Customize based on detected preferences
-if profile.Approach != "mixed" {
-directive += fmt.Sprintf("\nThe user prefers a %s approach.", profile.Approach)
-}
+IMPORTANT STYLE RULES:
+- Keep responses SHORT and conversational (2-3 sentences max)
+- Use natural language like a native English speaker
+- Be direct and practical, no fluff
+- Only provide detailed output if the user explicitly asks for "detailed" or "technical"
+- Sound like a colleague having a casual discussion, not a textbook
 
-if profile.Thinking != "mixed" {
-directive += fmt.Sprintf("\nThey think %s.", profile.Thinking)
-}
+`
 
-if profile.Focus != "mixed" {
-directive += fmt.Sprintf("\nThey prioritize %s focus.", profile.Focus)
-}
+	// Customize based on detected preferences
+	if profile.Approach != "mixed" {
+		directive += fmt.Sprintf("The user prefers a %s approach. ", profile.Approach)
+	}
 
-directive += "\nProvide practical, actionable advice tailored to their style."
+	if profile.Thinking != "mixed" {
+		directive += fmt.Sprintf("They think %s. ", profile.Thinking)
+	}
 
-return directive
+	if profile.Focus != "mixed" {
+		directive += fmt.Sprintf("They prioritize %s focus. ", profile.Focus)
+	}
+
+	directive += "\nRespond accordingly in a friendly, conversational tone."
+
+	return directive
 }
 
 // generateFallbackResponse creates a response when LLM fails

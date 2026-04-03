@@ -66,11 +66,12 @@ func (vc *VoiceCapture) CaptureAudio() (string, error) {
 
 	switch vc.RecordBinary {
 	case "ffmpeg":
-		// ffmpeg command to capture microphone on macOS
+		// ffmpeg command to capture microphone on macOS with VOLUME BOOST
 		cmd = exec.Command("ffmpeg",
 			"-f", "avfoundation",           // macOS audio framework
 			"-i", ":0",                     // Default microphone (input device 0)
 			"-t", fmt.Sprintf("%d", vc.Timeout),
+			"-af", "loudnorm=I=-20:TP=-1.5:LRA=11", // Audio normalization/volume boost
 			"-q:a", "9",                    // Quality setting
 			"-acodec", "pcm_s16le",         // WAV codec
 			"-ar", "16000",                 // 16kHz sample rate (good for speech recognition)
