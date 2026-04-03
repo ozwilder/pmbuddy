@@ -1,0 +1,236 @@
+package audio
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// VoiceCapture handles real microphone audio capture on macOS
+type VoiceCapture struct {
+	TempDir      string
+	RecordBinary string // ffmpeg or sox
+	Timeout      int    // seconds
+}
+
+// NewVoiceCapture creates a new voice capture handler
+func NewVoiceCapture(timeoutSeconds int) *VoiceCapture {
+	tempDir := os.TempDir()
+	
+	// Detect which recording tool is available
+	recordBinary := detectRecordingBinary()
+	
+	return &VoiceCapture{
+		TempDir:      tempDir,
+		RecordBinary: recordBinary,
+		Timeout:      timeoutSeconds,
+	}
+}
+
+// detectRecordingBinary finds the best available audio recording tool
+func detectRecordingBinary() string {
+	// Try ffmpeg first (most common and reliable)
+	if _, err := exec.LookPath("ffmpeg"); err == nil {
+		return "ffmpeg"
+	}
+	
+	// Fallback to sox
+	if _, err := exec.LookPath("sox"); err == nil {
+		return "sox"
+	}
+	
+	// Neither found - will fall back to AppleScript
+	return ""
+}
+
+// CaptureAudio records audio from the microphone for the specified duration
+// Returns the path to the recorded WAV file
+func (vc *VoiceCapture) CaptureAudio() (string, error) {
+	if vc.RecordBinary == "" {
+		return "", fmt.Errorf("no audio recording tool found (ffmpeg or sox required)")
+	}
+
+	// Create temporary file path
+	timestamp := time.Now().Unix()
+	audioFile := filepath.Join(vc.TempDir, fmt.Sprintf("pmbuddy_voice_%d.wav", timestamp))
+
+	fmt.Println("\n🎤 CAPTURING YOUR VOICE...")
+	fmt.Println(strings.Repeat("─", 70))
+	fmt.Printf("Recording for %d seconds... Speak now!\n", vc.Timeout)
+	SimpleListeningIndicator() // Show animation while recording
+
+	var cmd *exec.Cmd
+
+	switch vc.RecordBinary {
+	case "ffmpeg":
+		// ffmpeg command to capture microphone on macOS
+		cmd = exec.Command("ffmpeg",
+			"-f", "avfoundation",           // macOS audio framework
+			"-i", ":0",                     // Default microphone (input device 0)
+			"-t", fmt.Sprintf("%d", vc.Timeout),
+			"-q:a", "9",                    // Quality setting
+			"-acodec", "pcm_s16le",         // WAV codec
+			"-ar", "16000",                 // 16kHz sample rate (good for speech recognition)
+			"-ac", "1",                     // Mono
+			"-y",                           // Overwrite output file
+			audioFile,
+		)
+
+	case "sox":
+		// sox command to capture microphone on macOS
+		cmd = exec.Command("sox",
+			"-d",                           // Capture from default device
+			audioFile,                      // Output file
+			"rate", "16000",                // 16kHz sample rate
+			"channels", "1",                // Mono
+			"trim", "0", fmt.Sprintf("%d", vc.Timeout),
+		)
+	}
+
+	// Run the command
+	if output, err := cmd.CombinedOutput(); err != nil {
+		// ffmpeg writes to stderr, so check if file was created despite "error"
+		if _, fileErr := os.Stat(audioFile); fileErr == nil {
+			fmt.Println("✅ Audio captured successfully")
+			return audioFile, nil
+		}
+		return "", fmt.Errorf("voice capture failed: %v\nOutput: %s", err, string(output))
+	}
+
+	fmt.Println("✅ Audio captured successfully")
+	return audioFile, nil
+}
+
+// TranscribeAudio converts recorded audio to text using Python speech recognition
+func (vc *VoiceCapture) TranscribeAudio(audioFile string) (string, error) {
+	fmt.Println("\n⏳ Transcribing audio...")
+	
+	// Find transcribe.py script
+	scriptPath := findTranscribeScript()
+	if scriptPath == "" {
+		return "", fmt.Errorf("transcribe.py script not found")
+	}
+
+	// Run Python transcriber
+	cmd := exec.Command("python3", scriptPath, audioFile)
+	output, err := cmd.Output()
+	
+	if err != nil {
+		// Check stderr for more details
+		return "", fmt.Errorf("transcription failed: %v", err)
+	}
+
+	text := strings.TrimSpace(string(output))
+	if text == "" {
+		return "", fmt.Errorf("no speech recognized")
+	}
+
+	// Parse JSON response (if using structured output)
+	text = extractTextFromOutput(text)
+	
+	return text, nil
+}
+
+// findTranscribeScript locates the transcribe.py helper script
+func findTranscribeScript() string {
+	possiblePaths := []string{
+		"scripts/transcribe.py",
+		"./scripts/transcribe.py",
+		"/Users/ozwilder/Development/PMBuddy/scripts/transcribe.py",
+	}
+
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+
+	return ""
+}
+
+// extractTextFromOutput extracts transcribed text from Python script output
+func extractTextFromOutput(output string) string {
+	// If output is JSON (from transcriber), parse it
+	if strings.HasPrefix(output, "{") {
+		// Try to extract "text" field
+		parts := strings.Split(output, "\"text\":\"")
+		if len(parts) > 1 {
+			textPart := strings.Split(parts[1], "\"")[0]
+			return textPart
+		}
+	}
+
+	// Otherwise return as-is
+	return output
+}
+
+// CaptureVoiceWithFallback attempts to capture voice with smart fallback
+func (vc *VoiceCapture) CaptureVoiceWithFallback() (string, error) {
+	// Try to capture audio from microphone
+	audioFile, err := vc.CaptureAudio()
+	if err != nil {
+		fmt.Printf("⚠️  Microphone capture failed: %v\n", err)
+		fmt.Println("Falling back to text input dialog...\n")
+		
+		// Fallback to AppleScript dialog (manual typing)
+		return vc.TextInputDialog()
+	}
+
+	// Try to transcribe the audio
+	text, err := vc.TranscribeAudio(audioFile)
+	defer os.Remove(audioFile) // Clean up temp file
+
+	if err != nil {
+		fmt.Printf("⚠️  Transcription failed: %v\n", err)
+		fmt.Println("Falling back to text input dialog...\n")
+		
+		// Fallback to text input
+		return vc.TextInputDialog()
+	}
+
+	return text, nil
+}
+
+// TextInputDialog provides a fallback text input via AppleScript dialog
+func (vc *VoiceCapture) TextInputDialog() (string, error) {
+	applescript := `
+set recognizedText to ""
+try
+	set recognizedText to text returned of (display dialog "🎤 Type your question:" default answer "" buttons {"Cancel", "OK"} default button 2 with icon note)
+on error
+	set recognizedText to ""
+end try
+return recognizedText
+`
+
+	cmd := exec.Command("osascript", "-e", applescript)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("dialog failed: %v", err)
+	}
+
+	text := strings.TrimSpace(string(output))
+	if text == "" {
+		return "", fmt.Errorf("no input provided")
+	}
+
+	return text, nil
+}
+
+// IsAvailable checks if real voice capture is possible
+func (vc *VoiceCapture) IsAvailable() bool {
+	return vc.RecordBinary != ""
+}
+
+// GetStatus returns current capture status
+func (vc *VoiceCapture) GetStatus() map[string]interface{} {
+	return map[string]interface{}{
+		"recording_tool": vc.RecordBinary,
+		"is_available":   vc.IsAvailable(),
+		"timeout":        vc.Timeout,
+		"temp_dir":       vc.TempDir,
+	}
+}
