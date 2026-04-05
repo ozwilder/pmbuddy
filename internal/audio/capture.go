@@ -62,7 +62,13 @@ func (vc *VoiceCapture) CaptureAudio() (string, error) {
 	fmt.Println("\n🎤 CAPTURING YOUR VOICE...")
 	fmt.Println(strings.Repeat("─", 70))
 	fmt.Printf("Recording for %d seconds... Speak now!\n", vc.Timeout)
-	SimpleListeningIndicator() // Show animation while recording
+	
+	// Show simple animated recording indicator
+	for i := 0; i < vc.Timeout; i++ {
+		fmt.Print(".")
+		time.Sleep(1 * time.Second)
+	}
+	fmt.Println()
 
 	var cmd *exec.Cmd
 	
@@ -193,17 +199,21 @@ func (vc *VoiceCapture) TranscribeAudio(audioFile string) (string, error) {
 	output, err := cmd.Output()
 	
 	if err != nil {
-		return "", fmt.Errorf("transcription failed: %v", err)
+		return "", fmt.Errorf("transcription process failed: %v", err)
 	}
 
 	text := strings.TrimSpace(string(output))
 	if text == "" {
+		return "", fmt.Errorf("no output from transcriber")
+	}
+
+	// Parse JSON response (from transcriber)
+	text = extractTextFromOutput(text)
+	
+	if text == "" {
 		return "", fmt.Errorf("no speech recognized")
 	}
 
-	// Parse JSON response (if using structured output)
-	text = extractTextFromOutput(text)
-	
 	return text, nil
 }
 
@@ -224,32 +234,34 @@ func findTranscribeScript() string {
 	return ""
 }
 
-// extractTextFromOutput extracts transcribed text from Python script output
+// extractTextFromOutput extracts transcribed text from Python script JSON output
 func extractTextFromOutput(output string) string {
-	// If output is JSON (from transcriber), parse it
-	if strings.HasPrefix(strings.TrimSpace(output), "{") {
-		// Try to parse as JSON properly
+	output = strings.TrimSpace(output)
+	
+	// If output starts with {, try to parse as JSON
+	if strings.HasPrefix(output, "{") {
 		var result map[string]interface{}
 		if err := json.Unmarshal([]byte(output), &result); err == nil {
-			// Successfully parsed JSON
+			// Check if transcription was successful
+			if success, ok := result["success"].(bool); ok && !success {
+				// Transcription failed according to the script
+				return ""
+			}
+			
+			// Extract text field
 			if text, ok := result["text"].(string); ok && text != "" {
 				return text
 			}
 		}
-		
-		// Fallback to manual parsing if JSON unmarshaling fails
-		// This handles edge cases with unusual JSON formatting
-		parts := strings.Split(output, "\"text\":\"")
-		if len(parts) > 1 {
-			textPart := strings.Split(parts[1], "\"")[0]
-			if textPart != "" {
-				return textPart
-			}
-		}
 	}
-
-	// Otherwise return as-is (for non-JSON output)
-	return output
+	
+	// Fallback: if it doesn't look like JSON, return as-is
+	// (but this should not happen with the fixed transcribe.py)
+	if !strings.HasPrefix(output, "{") && output != "" {
+		return output
+	}
+	
+	return ""
 }
 
 // CaptureVoiceWithFallback attempts to capture voice with smart fallback

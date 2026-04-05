@@ -1,0 +1,22 @@
+# PMBuddy Python Dependencies
+# Install with: pip3 install -r requirements.txt
+
+# REQUIRED: Speech-to-text transcription (OpenAI Whisper)
+# Best accuracy and offline capability
+# License: MIT
+openai-whisper>=20231117
+
+# RECOMMENDED: Unified speech recognition interface
+# Provides fallback engines (Google, Sphinx, etc.)
+# License: BSD 3-Clause
+SpeechRecognition>=3.10.0
+
+# OPTIONAL: Offline speech recognition engine
+# Lightweight alternative when internet unavailable
+# License: BSD
+pocketsphinx>=5.0.0
+
+# OPTIONAL: Python audio I/O
+# Enhanced audio capture and playback capabilities
+# License: MIT
+PyAudio>=0.2.11

@@ -1,0 +1,172 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                    PMBuddy - External Dependencies & Licenses                  ║
+║                                                                                ║
+║  This document lists all external dependencies used by PMBuddy and their      ║
+║  respective licenses. Please review each license to ensure compliance with    ║
+║  your use case.                                                               ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+════════════════════════════════════════════════════════════════════════════════════
+GO DEPENDENCIES
+════════════════════════════════════════════════════════════════════════════════════
+
+1. github.com/spf13/cobra v1.7.0
+   Purpose: Command-line interface framework (CLI argument parsing and commands)
+   License: Apache License 2.0
+   License URL: https://github.com/spf13/cobra/blob/main/LICENSE
+   Repository: https://github.com/spf13/cobra
+
+2. github.com/spf13/pflag v1.0.5
+   Purpose: Provides POSIX-compliant command-line flag parsing (dependency of Cobra)
+   License: BSD 3-Clause License
+   License URL: https://github.com/spf13/pflag/blob/master/LICENSE
+   Repository: https://github.com/spf13/pflag
+
+3. github.com/inconshreveable/mousetrap v1.1.0
+   Purpose: Handles Windows console window behavior for CLI applications (Cobra dependency)
+   License: Apache License 2.0
+   License URL: https://github.com/inconshreveable/mousetrap/blob/master/LICENSE
+   Repository: https://github.com/inconshreveable/mousetrap
+
+════════════════════════════════════════════════════════════════════════════════════
+PYTHON DEPENDENCIES (scripts/)
+════════════════════════════════════════════════════════════════════════════════════
+
+PRIMARY (Required for speech-to-text functionality):
+
+1. openai-whisper (REQUIRED - installed during init)
+   Purpose: OpenAI's speech-to-text transcription library
+   Version: Latest (installs during initialization)
+   License: MIT License
+   License URL: https://github.com/openai/whisper/blob/main/LICENSE
+   Repository: https://github.com/openai/whisper
+   Install: pip3 install openai-whisper
+   Note: Large models (base model ~140MB) are downloaded on first use
+
+2. SpeechRecognition (RECOMMENDED)
+   Purpose: Unified interface for multiple speech recognition engines
+   Version: 3.x
+   License: BSD 3-Clause License
+   License URL: https://github.com/Uberi/speech_recognition/blob/master/LICENSE.txt
+   Repository: https://github.com/Uberi/speech_recognition
+   Install: pip3 install SpeechRecognition
+   Supports:
+     - Google Speech Recognition API (free, requires internet)
+     - CMU PocketSphinx (offline, requires pocketsphinx package)
+     - Other engines (Windows/Mac only)
+
+OPTIONAL (For offline speech recognition):
+
+3. pocketsphinx
+   Purpose: Offline speech recognition engine (lightweight alternative to online APIs)
+   License: BSD License
+   License URL: https://github.com/cmusphinx/pocketsphinx/blob/master/LICENSE
+   Repository: https://github.com/cmusphinx/pocketsphinx
+   Install: pip3 install pocketsphinx
+   Note: Lower accuracy than Google or Whisper, but works completely offline
+
+4. PyAudio
+   Purpose: Python bindings for audio I/O
+   License: MIT License
+   License URL: https://people.csail.mit.edu/hubert/pyaudio/ (MIT)
+   Note: May require system-level audio libraries (portaudio)
+
+STANDARD LIBRARY (Python):
+
+5. sys, os, json, subprocess, pathlib
+   Purpose: Core Python standard library modules
+   License: Python Software Foundation License
+   URL: https://docs.python.org/3/license.html
+
+════════════════════════════════════════════════════════════════════════════════════
+MACOS SYSTEM DEPENDENCIES
+════════════════════════════════════════════════════════════════════════════════════
+
+1. macOS Text-to-Speech (say command)
+   Purpose: Native macOS voice output via the 'say' command
+   License: Proprietary (Apple Inc.)
+   Note: Included in macOS; no installation required
+
+2. macOS Speech Recognition
+   Purpose: Native macOS speech-to-text capability (when available)
+   License: Proprietary (Apple Inc.)
+   Note: Used as fallback in voice_input_simple.py when available
+
+════════════════════════════════════════════════════════════════════════════════════
+DEPENDENCY COMPATIBILITY MATRIX
+════════════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────┬──────────────────────────────────────────────────────┐
+│ SPEECH-TO-TEXT      │ WORKING MODE                                         │
+├─────────────────────┼──────────────────────────────────────────────────────┤
+│ OpenAI Whisper      │ ✓ Offline, ✓ Best accuracy, ~140MB model download   │
+│ Google Speech API   │ ✓ Online required, ✓ Good accuracy, ✓ Free          │
+│ PocketSphinx        │ ✓ Offline, ⚠ Lower accuracy, ✓ Lightweight          │
+│ macOS Native        │ ✓ Offline, ✓ Platform-native, ⚠ Voice input simple  │
+└─────────────────────┴──────────────────────────────────────────────────────┘
+
+════════════════════════════════════════════════════════════════════════════════════
+INITIALIZATION & INSTALLATION
+════════════════════════════════════════════════════════════════════════════════════
+
+When PMBuddy is run, it automatically handles Python dependency installation:
+
+1. On first run: Check if openai-whisper is installed
+2. If missing: Automatically install via pip3
+3. Graceful fallback: If Whisper not available, use SpeechRecognition
+4. If SpeechRecognition missing: Attempt to use system speech recognition
+
+Installation commands (manual override):
+
+  # Install all speech-to-text engines
+  pip3 install openai-whisper SpeechRecognition pocketsphinx
+
+  # Install minimal (Whisper only - recommended)
+  pip3 install openai-whisper
+
+  # Install minimal (Google API fallback)
+  pip3 install SpeechRecognition
+
+════════════════════════════════════════════════════════════════════════════════════
+LICENSE SUMMARY
+════════════════════════════════════════════════════════════════════════════════════
+
+GO DEPENDENCIES:
+  • Apache 2.0:   Cobra, Mousetrap
+  • BSD 3-Clause: pflag
+
+PYTHON DEPENDENCIES:
+  • MIT:          openai-whisper, PyAudio
+  • BSD 3-Clause: SpeechRecognition, PocketSphinx
+  • Python PSF:   Standard library
+
+SYSTEM DEPENDENCIES:
+  • Proprietary:  macOS (say command, speech recognition)
+
+════════════════════════════════════════════════════════════════════════════════════
+COMPLIANCE NOTES
+════════════════════════════════════════════════════════════════════════════════════
+
+✓ All dependencies use permissive or copyleft licenses (no GPL incompatibilities)
+✓ No proprietary or restricted-use dependencies (except macOS system libraries)
+✓ All dependencies are open-source projects
+✓ MIT and BSD licenses allow both commercial and personal use
+✓ Apache 2.0 includes explicit patent grants
+
+════════════════════════════════════════════════════════════════════════════════════
+UPDATING DEPENDENCIES
+════════════════════════════════════════════════════════════════════════════════════
+
+Go dependencies:
+  go get -u github.com/spf13/cobra
+
+Python dependencies:
+  pip3 install --upgrade openai-whisper SpeechRecognition pocketsphinx
+
+Check for dependency vulnerabilities:
+  go list -u -m all              # Check Go updates
+  pip-audit                       # Check Python security issues
+
+════════════════════════════════════════════════════════════════════════════════════
+
+Last Updated: 2026-04-04

@@ -1,21 +1,23 @@
 package agent
 
 import (
-"fmt"
-"time"
+	"fmt"
+	"strings"
+	"time"
 
-"github.com/ozwilder/pmbuddy/internal/knowledge"
+	"github.com/ozwilder/pmbuddy/internal/knowledge"
 )
 
 // PMAdvisor is the core AI advisor for product management
 type PMAdvisor struct {
-SessionID      string
-CreatedAt      time.Time
-ConversationID string
-Context        map[string]interface{}
-Memory         []Message
-KnowledgeBase  *knowledge.KnowledgeBase
-LLM            LLMProvider
+	SessionID       string
+	CreatedAt       time.Time
+	ConversationID  string
+	Context         map[string]interface{}
+	Memory          []Message
+	KnowledgeBase   *knowledge.KnowledgeBase
+	PMKnowledge     *knowledge.PMKnowledgeBase
+	LLM             LLMProvider
 }
 
 // Message represents a single conversation message
@@ -28,27 +30,40 @@ Metadata  map[string]interface{} `json:"metadata,omitempty"`
 
 // NewPMAdvisor creates a new PM advisor instance
 func NewPMAdvisor() *PMAdvisor {
-sessionID := generateSessionID()
+	sessionID := generateSessionID()
 
-// Initialize LLM client - try Ollama first
-var llmProvider LLMProvider
-ollamaClient := NewOllamaClient("http://localhost:11434", "mistral")
-if ollamaClient.IsAvailable() {
-llmProvider = ollamaClient
-} else {
-// Fallback to mock if Ollama not available
-llmProvider = NewMockLLMClient()
-}
+	// Initialize LLM client - try Ollama first
+	var llmProvider LLMProvider
+	ollamaClient := NewOllamaClient("http://localhost:11434", "mistral")
+	if ollamaClient.IsAvailable() {
+		llmProvider = ollamaClient
+	} else {
+		// Fallback to mock if Ollama not available
+		llmProvider = NewMockLLMClient()
+	}
 
-return &PMAdvisor{
-SessionID:      sessionID,
-CreatedAt:      time.Now(),
-ConversationID: generateConversationID(),
-Context:        make(map[string]interface{}),
-Memory:         []Message{},
-KnowledgeBase:  knowledge.NewKnowledgeBase(sessionID),
-LLM:            llmProvider,
-}
+	// Load PM knowledge base from ProductManagement folder
+	pmKnowledge, err := knowledge.LoadPMKnowledge(".")
+	if err != nil {
+		// If PM knowledge fails to load, continue with empty (non-fatal)
+		pmKnowledge = &knowledge.PMKnowledgeBase{
+			Concepts:   make(map[string]*knowledge.PMConcept),
+			Categories: make(map[string][]string),
+			Content:    make(map[string]string),
+			RelatedMap: make(map[string][]string),
+		}
+	}
+
+	return &PMAdvisor{
+		SessionID:      sessionID,
+		CreatedAt:      time.Now(),
+		ConversationID: generateConversationID(),
+		Context:        make(map[string]interface{}),
+		Memory:         []Message{},
+		KnowledgeBase:  knowledge.NewKnowledgeBase(sessionID),
+		PMKnowledge:    pmKnowledge,
+		LLM:            llmProvider,
+	}
 }
 
 // GetWelcomeMessage returns the initial welcome message
@@ -72,6 +87,63 @@ I learn from our conversations and improve over time.
 %s
 
 What would you like to discuss?`, llmStatus)
+}
+
+// ValidateQuery checks if user input is valid, complete, and relevant to product management
+func (pm *PMAdvisor) ValidateQuery(query string) (bool, string) {
+	query = strings.TrimSpace(query)
+	
+	if len(query) < 5 {
+		return false, "That's too brief - could you give me more details about what you need help with?"
+	}
+	
+	incompletePatterns := []string{"how do i", "how to", "what is", "when should", "why", "where", "which"}
+	lowerQuery := strings.ToLower(query)
+	
+	for _, pattern := range incompletePatterns {
+		if strings.HasPrefix(lowerQuery, pattern) {
+			afterPattern := strings.TrimSpace(strings.TrimPrefix(lowerQuery, pattern))
+			if len(afterPattern) < 3 {
+				return false, "I need more context - could you complete that thought?"
+			}
+		}
+	}
+	
+	if strings.HasSuffix(query, "...") || strings.HasSuffix(query, "- ") {
+		return false, "It looks like your message got cut off - could you finish what you were saying?"
+	}
+	
+	pmDomainKeywords := map[string]bool{
+		"product": true, "feature": true, "user": true, "market": true, "strategy": true,
+		"roadmap": true, "priorit": true, "ux": true, "kpi": true, "metric": true,
+		"research": true, "discover": true, "launch": true, "gtm": true, "customer": true,
+	}
+	
+	nonPMPatterns := []string{
+		"code", "debug", "bug", "fix", "recipe", "bake", "cake", "weather", "homework", "sports",
+	}
+	
+	if strings.Contains(lowerQuery, "porn") || strings.Contains(lowerQuery, "nsfw") {
+		return false, "I'm focused on product management topics. Could you ask me something related to product strategy or user needs?"
+	}
+	
+	hasPMKeyword := false
+	for keyword := range pmDomainKeywords {
+		if strings.Contains(lowerQuery, keyword) {
+			hasPMKeyword = true
+			break
+		}
+	}
+	
+	if !hasPMKeyword {
+		for _, pattern := range nonPMPatterns {
+			if strings.Contains(lowerQuery, pattern) {
+				return false, "I'm specialized in product management. What product-related topic would you like to discuss?"
+			}
+		}
+	}
+	
+	return true, ""
 }
 
 // ProcessQuery handles incoming questions/requests

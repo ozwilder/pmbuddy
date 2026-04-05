@@ -120,26 +120,30 @@ def transcribe_with_whisper(audio_file):
 
 def main():
     if len(sys.argv) < 2:
+        print(json.dumps({"success": False, "error": "No audio file provided", "text": ""}))
         return
         
     audio_file = sys.argv[1]
 
     if not os.path.exists(audio_file):
+        print(json.dumps({"success": False, "error": "Audio file not found", "text": ""}))
         return
 
     # Try Whisper first (better quality), then fall back to speech_recognition
     text = transcribe_with_whisper(audio_file)
     if text:
+        # Output already printed by transcribe_with_whisper
         return
     
     text = transcribe_with_recognizer(audio_file)
     if text:
+        # Output already printed by transcribe_with_recognizer
         return
 
     # If we get here, all methods failed - print error JSON
     print(json.dumps({
         "success": False,
-        "error": "Transcription failed",
+        "error": "Transcription failed - no speech recognized",
         "text": ""
     }))
 
